@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TROYS260 ELITE BOX
+// @name         TROYS260 V1.4.0
 // @namespace    https://github.com/TROYS260/TROYS260-BOX
-// @version      1.1.3
-// @description  Lógica original 1.1.3 con diseño optimizado.
+// @version      1.4.0
+// @description  Lógica 1.1.3 + Temporizador 5:22 + Alertas
 // @author       TROYS260
 // @match        https://universe.flyff.com/*
 // @grant        none
@@ -11,16 +11,8 @@
 (function () {
     'use strict';
 
-    let isMinimized = false;
-    let isLocked = false;
     let worker = null;
-    let isHealRunning = false;
-
-    const HEAL_TARGET_KEY = '5';   
-    const HEAL_AOE_KEY = '6';      
-    const ATAL_BUFOS_CODE = 'BracketLeft'; 
-    const ATAL_CURA_CODES = ['Quote', 'BracketRight'];
-    const ATAL_MINIMIZE_CODE = 'F10'; 
+    let timerInterval = null;
 
     const bufoSequence = [
         { key: 'F1', delay: 1500 }, { key: 'F1', delay: 1500 }, { key: 'F2', delay: 1500 },
@@ -32,11 +24,7 @@
 
     const workerCode = `
         let burstTimers = [];
-        let healTimeout = null;
-        let isHealActive = false;
         function getHumanizedDelay() { return Math.floor(Math.random() * (1400 - 600 + 1)) + 600; }
-        function getRandomTargetCount() { return Math.floor(Math.random() * (28 - 14 + 1)) + 14; }
-        function getRandomAoECount() { return Math.floor(Math.random() * (3 - 1 + 1)) + 1; }
         self.onmessage = function(e) {
             if (e.data.action === 'startBurst') {
                 let seq = e.data.sequence; let currentIdx = 0;
@@ -47,24 +35,6 @@
                 }
                 executeNextBufo();
             } else if (e.data.action === 'stopBurst') { burstTimers.forEach(t => clearTimeout(t)); burstTimers = []; }
-            else if (e.data.action === 'startHeal') {
-                isHealActive = true;
-                setTimeout(() => {
-                    let targetCount = getRandomTargetCount(); let aoeCount = 0; let currentMode = 'target';
-                    function loopHeal() {
-                        if (!isHealActive) return;
-                        if (currentMode === 'target') {
-                            if (targetCount > 0) { self.postMessage({ action: 'pressKey', key: e.data.targetKey }); targetCount--; } 
-                            else { aoeCount = getRandomAoECount(); currentMode = 'aoe'; }
-                        } else {
-                            if (aoeCount > 0) { self.postMessage({ action: 'pressKey', key: e.data.aoeKey }); aoeCount--; } 
-                            else { targetCount = getRandomTargetCount(); currentMode = 'target'; }
-                        }
-                        healTimeout = setTimeout(loopHeal, getHumanizedDelay());
-                    }
-                    loopHeal();
-                }, 0);
-            } else if (e.data.action === 'stopHeal') { isHealActive = false; if (healTimeout) { clearTimeout(healTimeout); healTimeout = null; } }
         };
     `;
     const blob = new Blob([workerCode], { type: 'application/javascript' });
@@ -73,78 +43,55 @@
     const pressKey = (keyCommand) => {
         const gameCanvas = document.querySelector('canvas');
         if (!gameCanvas) return;
-        let cleanKey = keyCommand.trim().toUpperCase(); 
-        let code = cleanKey.startsWith('F') ? cleanKey : "Digit" + cleanKey;
-        const eventConfig = { key: cleanKey, code: code, bubbles: true, cancelable: true, keyCode: cleanKey.charCodeAt(0), view: window };
+        let code = keyCommand.startsWith('F') ? keyCommand : "Digit" + keyCommand;
+        const eventConfig = { key: keyCommand, code: code, bubbles: true, cancelable: true, keyCode: keyCommand.charCodeAt(0), view: window };
         gameCanvas.dispatchEvent(new KeyboardEvent('keydown', eventConfig));
         setTimeout(() => { gameCanvas.dispatchEvent(new KeyboardEvent('keyup', eventConfig)); }, 20);
     };
 
+    const startTimer = (duration) => {
+        if (timerInterval) clearInterval(timerInterval);
+        let timer = duration;
+        const display = document.getElementById('timer-display');
+        timerInterval = setInterval(() => {
+            let m = Math.floor(timer / 60);
+            let s = timer % 60;
+            display.innerText = `${m}:${s.toString().padStart(2, '0')}`;
+            if (timer <= 30 && timer > 0) {
+                display.style.color = (timer % 2 === 0) ? '#ff4d4d' : 'white';
+                if ([30, 20, 10, 5, 4, 3, 2, 1].includes(timer)) {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    osc.connect(ctx.destination);
+                    osc.start(); osc.stop(ctx.currentTime + 0.1);
+                }
+            } else { display.style.color = 'white'; }
+            if (--timer < 0) { clearInterval(timerInterval); display.innerText = "0:00"; }
+        }, 1000);
+    };
+
     worker.onmessage = function(e) {
-        if (e.data.action === 'pressKey') { pressKey(e.data.key); } 
-        else if (e.data.action === 'finishBurst') { const b = document.getElementById('btn-action-burst'); if(b) stopBurst(b); }
+        if (e.data.action === 'pressKey') { 
+            pressKey(e.data.key); 
+            if (e.data.key === '2') startTimer(322);
+        } else if (e.data.action === 'finishBurst') { const b = document.getElementById('btn-action-burst'); if(b) stopBurst(b); }
     };
 
-    const restoreFocus = () => { const c = document.querySelector('canvas'); if (c) c.focus(); };
-    const stopBurst = (btn) => { worker.postMessage({ action: 'stopBurst' }); btn.innerText = "ACTIVAR BUFOS"; btn.style.background = "#2bb649"; restoreFocus(); };
-    const startBurst = (btn) => { btn.innerText = "PARAR"; btn.style.background = "#dc3545"; restoreFocus(); worker.postMessage({ action: 'startBurst', sequence: bufoSequence }); };
-    const stopHeal = (btn) => { worker.postMessage({ action: 'stopHeal' }); isHealRunning = false; btn.innerText = "ACTIVAR CURA"; btn.style.background = "#2bb649"; restoreFocus(); };
-    const startHeal = (btn) => { isHealRunning = true; btn.innerText = "PARAR CURA"; btn.style.background = "#dc3545"; restoreFocus(); worker.postMessage({ action: 'startHeal', targetKey: HEAL_TARGET_KEY, aoeKey: HEAL_AOE_KEY }); };
-
-    const detectMovementAndStop = (e) => {
-        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
-        if (['W', 'A', 'S', 'D'].includes(e.key?.toUpperCase()) || (e.type === 'mousedown' && e.target.tagName === 'CANVAS')) {
-            if (isHealRunning) { const h = document.getElementById('btn-action-heal'); if (h) stopHeal(h); }
-        }
-    };
-
-    const detectHotkeys = (e) => {
-        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
-        if (e.code === ATAL_BUFOS_CODE) { e.preventDefault(); const b = document.getElementById('btn-action-burst'); if(b) b.innerText === "ACTIVAR BUFOS" ? startBurst(b) : stopBurst(b); }
-        else if (ATAL_CURA_CODES.includes(e.code)) { e.preventDefault(); const h = document.getElementById('btn-action-heal'); if(h) h.innerText === "ACTIVAR CURA" ? startHeal(h) : stopHeal(h); }
-        else if (e.code === ATAL_MINIMIZE_CODE) { e.preventDefault(); const b = document.getElementById('fs-body'); b.style.display = b.style.display === 'none' ? 'block' : 'none'; }
-    };
-
-    window.addEventListener('keydown', detectMovementAndStop, true);
-    window.addEventListener('mousedown', detectMovementAndStop, true);
-    window.addEventListener('keydown', detectHotkeys, true);
+    const stopBurst = (btn) => { worker.postMessage({ action: 'stopBurst' }); btn.innerText = "ACTIVAR BUFOS"; btn.style.background = "#2bb649"; };
+    const startBurst = (btn) => { btn.innerText = "PARAR"; btn.style.background = "#dc3545"; worker.postMessage({ action: 'startBurst', sequence: bufoSequence }); };
 
     const container = document.createElement('div');
-    Object.assign(container.style, { position: 'fixed', top: '40px', right: '40px', width: '235px', backgroundColor: '#0c100d', color: '#eee', borderRadius: '10px', border: '1px solid #28a745', zIndex: '99999', fontFamily: 'Segoe UI', fontSize: '11px', userSelect: 'none' });
+    Object.assign(container.style, { position: 'fixed', top: '40px', right: '40px', width: '235px', backgroundColor: '#0c100d', color: '#eee', borderRadius: '10px', border: '1px solid #28a745', zIndex: '99999', fontFamily: 'Segoe UI', fontSize: '11px' });
     container.innerHTML = `
-        <div id="fs-header" style="padding: 10px; background: #0f1410; border-radius: 9px 9px 0 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #28a745; cursor: move;">
-            <span style="font-weight:bold; color: #4ef06d;">TROYS260 ELITE BOX</span>
-            <div style="cursor:pointer; display:flex; gap:10px; font-size:14px; color:#4ef06d;">
-                <span id="fs-lock" title="Bloquear">🔓</span>
-                <span id="fs-minimize" title="Minimizar">➖</span>
-                <span id="fs-close" title="Cerrar">✕</span>
-            </div>
+        <div id="fs-header" style="padding: 10px; background: #0f1410; border-radius: 9px 9px 0 0; border-bottom: 1px solid #28a745; cursor: move; display: flex; justify-content: space-between;">
+            <span style="font-weight:bold; color: #4ef06d; letter-spacing: 1px;">TROYS260</span>
         </div>
-        <div id="fs-body" style="padding: 10px;">
-            <div style="margin-bottom:8px;"><button id="btn-action-burst" style="width:100%; padding:6px; cursor:pointer; background:#2bb649; color:white; border:none; border-radius:3px; font-weight:bold;">ACTIVAR BUFOS</button></div>
-            <div style="margin-bottom:8px;"><button id="btn-action-heal" style="width:100%; padding:6px; cursor:pointer; background:#2bb649; color:white; border:none; border-radius:3px; font-weight:bold;">ACTIVAR CURA</button></div>
-            <div style="text-align:center; padding:5px; background:#1a241b; border:1px solid #333; color:white; border-radius:3px; font-weight:bold;">0:00</div>
+        <div style="padding: 10px;">
+            <button id="btn-action-burst" style="width:100%; padding:6px; cursor:pointer; background:#2bb649; color:white; border:none; border-radius:3px; font-weight:bold;">ACTIVAR BUFOS</button>
+            <div id="timer-display" style="margin-top:8px; text-align:center; padding:5px; background:#1a241b; border:1px solid #333; color:white; border-radius:3px; font-weight:bold; transition: 0.3s;">0:00</div>
         </div>
     `;
     document.body.appendChild(container);
 
-    container.querySelector('#fs-header').onmousedown = (e) => {
-        if(isLocked || e.target.id === 'fs-lock' || e.target.id === 'fs-minimize' || e.target.id === 'fs-close') return;
-        let offset = [container.offsetLeft - e.clientX, container.offsetTop - e.clientY];
-        const move = (e) => { container.style.left = (e.clientX + offset[0]) + 'px'; container.style.top = (e.clientY + offset[1]) + 'px'; container.style.right = 'auto'; };
-        document.addEventListener('mousemove', move);
-        document.addEventListener('mouseup', () => document.removeEventListener('mousemove', move));
-    };
-
-    container.querySelector('#fs-lock').onclick = function() { isLocked = !isLocked; this.innerText = isLocked ? '🔒' : '🔓'; };
-    container.querySelector('#fs-minimize').onclick = function() { 
-        const b = document.getElementById('fs-body'); 
-        b.style.display = b.style.display === 'none' ? 'block' : 'none'; 
-        this.innerText = b.style.display === 'none' ? '➕' : '➖';
-    };
-    container.querySelector('#fs-close').onclick = () => container.remove();
-
     container.querySelector('#btn-action-burst').onclick = function() { this.innerText === "ACTIVAR BUFOS" ? startBurst(this) : stopBurst(this); };
-    container.querySelector('#btn-action-heal').onclick = function() { this.innerText === "ACTIVAR CURA" ? startHeal(this) : stopHeal(this); };
 })();
-                                                    
