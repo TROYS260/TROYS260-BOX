@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TROYS260 BOX
 // @namespace    https://github.com/TROYS260/TROYS260-BOX
-// @version      1.4.0
-// @description  Autocura Inteligente y Ráfaga de Bufos compacta y personalizada al 100% para TROYS260. Incluye Timer 5:22 y Candado.
+// @version      1.4.1
+// @description  Autocura Inteligente y Ráfaga de Bufos compacta y personalizada al 100% para TROYS260. Incluye Timer 5:22, Candado y Fix de Renderizado.
 // @author       TROYS260
 // @match        https://universe.flyff.com/*
 // @grant        none
@@ -13,7 +13,7 @@
     'use strict';
 
     let isMinimized = false;
-    let isLocked = false; // Nuevo: Estado del candado
+    let isLocked = false; 
     let worker = null;
     let isHealRunning = false;
     let timerInterval = null; 
@@ -121,8 +121,17 @@
     const startHeal = (btn) => { isHealRunning = true; btn.innerText = "PARAR CURA"; btn.className = "btn-premium btn-p-red"; restoreFocus(); worker.postMessage({ action: 'startHeal', targetKey: HEAL_TARGET_KEY }); };
 
     const toggleMinimize = () => {
-        if (!isMinimized) { body.style.display = 'none'; container.style.width = '160px'; container.querySelector('#fs-minimize').innerText = '+'; isMinimized = true; } 
-        else { body.style.display = 'flex'; container.style.width = '235px'; container.querySelector('#fs-minimize').innerText = '−'; isMinimized = false; }
+        if (!isMinimized) { 
+            body.style.display = 'none'; 
+            container.style.width = '160px'; 
+            container.querySelector('#fs-minimize').innerText = '+'; 
+            isMinimized = true; 
+        } else { 
+            body.style.display = 'block'; 
+            container.style.width = '235px'; 
+            container.querySelector('#fs-minimize').innerText = '−'; 
+            isMinimized = false; 
+        }
     };
 
     const toggleLock = () => {
@@ -142,7 +151,7 @@
     Object.assign(container.style, { position: 'fixed', top: '40px', right: '40px', width: '235px', backgroundColor: '#0c100d', color: '#eee', borderRadius: '10px', border: '1px solid #28a745', zIndex: '10000', fontFamily: 'Segoe UI', fontSize: '11px', userSelect: 'none' });
     container.innerHTML = `
         <div id="fs-header" style="padding: 10px; background: #0f1410; cursor: move; border-radius: 9px 9px 0 0; display: flex; justify-content: center; border-bottom: 1px solid #1e3d23; font-weight: bold; color: #4ef06d;">
-            <span>TROYS260 V1.4.0</span>
+            <span>TROYS260 V1.4.1</span>
             <div style="position: absolute; right: 10px; display: flex; gap: 8px;">
                 <span id="fs-lock" class="header-btn">🔓</span>
                 <span id="fs-minimize" class="header-btn">−</span>
