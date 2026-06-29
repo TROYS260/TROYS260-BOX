@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TROYS260 BOX
 // @namespace    https://github.com/TROYS260/TROYS260-BOX
-// @version      1.4.2
-// @description  Autocura Inteligente y Ráfaga de Bufos compacta y personalizada al 100% para TROYS260. Incluye Timer 5:22, Candado, Fix de Renderizado y Auto-Stop.
+// @version      1.4.3
+// @description  Autocura Inteligente y Ráfaga de Bufos. Fix de Foco, Estabilidad de Render y Auto-Stop al caminar.
 // @author       TROYS260
 // @match        https://universe.flyff.com/*
 // @grant        none
@@ -19,8 +19,6 @@
     let timerInterval = null; 
 
     const HEAL_TARGET_KEY = '5';   
-    const HEAL_AOE_KEY = '6';      
-
     const ATAL_BUFOS_CODE = 'BracketLeft'; 
     const ATAL_CURA_CODES = ['Quote', 'BracketRight']; 
     const ATAL_MINIMIZE_CODE = 'F10'; 
@@ -65,26 +63,46 @@
     const blob = new Blob([workerCode], { type: 'application/javascript' });
     worker = new Worker(URL.createObjectURL(blob));
 
-    // --- LÓGICA DE DETECCIÓN DE MOVIMIENTO (RESTAURADA Y EXTENDIDA) ---
-    const detectMovementAndStop = (e) => {
-        if (isHealRunning) {
-            // Teclas de movimiento
-            if (['w', 'a', 's', 'd', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-                const h = document.getElementById('btn-action-heal');
-                if (h) stopHeal(h);
-            }
+    // --- FIX: RESTORE FOCUS MEJORADO ---
+    const restoreFocus = () => { 
+        const g = document.querySelector('canvas'); 
+        if (g) {
+            g.focus();
+            // Aseguramos que el foco sea efectivo
+            window.getSelection().removeAllRanges();
         }
     };
-    window.addEventListener('keydown', detectMovementAndStop, true);
-    
-    // Detección de clic en el juego para detener cura
-    window.addEventListener('mousedown', (e) => {
-        if (isHealRunning && e.target.tagName === 'CANVAS') {
-            const h = document.getElementById('btn-action-heal');
-            if (h) stopHeal(h);
+
+    const pressKey = (k) => {
+        const g = document.querySelector('canvas');
+        if (!g) return;
+        let c = k.startsWith('F') ? k : "Digit" + k;
+        g.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: c, bubbles: true }));
+        setTimeout(() => g.dispatchEvent(new KeyboardEvent('keyup', { key: k, code: c, bubbles: true })), 20);
+    };
+
+    // --- LÓGICA DE DETECCIÓN DE MOVIMIENTO (SOLO SI NO ESTAMOS ESCRIBIENDO) ---
+    const stopHealForced = () => {
+        const btn = document.getElementById('btn-action-heal');
+        if (btn && btn.classList.contains('btn-p-red')) {
+            stopHeal(btn);
         }
-    }, true);
-    // ------------------------------------------------------------------
+    };
+
+    window.addEventListener('keydown', (e) => {
+        // No interferir si el usuario está escribiendo en el chat
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        if (['w', 'a', 's', 'd', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            stopHealForced();
+        }
+    }, false); // Cambiado a false para no bloquear el bubbling
+
+    window.addEventListener('mousedown', (e) => {
+        if (e.target.tagName === 'CANVAS') {
+            stopHealForced();
+        }
+    }, false);
 
     const startTimer = (duration) => {
         if (timerInterval) clearInterval(timerInterval);
@@ -119,15 +137,6 @@
     `;
     document.head.appendChild(documentStyle);
 
-    const restoreFocus = () => { const g = document.querySelector('canvas'); if (g) g.focus(); };
-    const pressKey = (k) => {
-        const g = document.querySelector('canvas');
-        if (!g) return;
-        let c = k.startsWith('F') ? k : "Digit" + k;
-        g.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: c, bubbles: true }));
-        setTimeout(() => g.dispatchEvent(new KeyboardEvent('keyup', { key: k, code: c, bubbles: true })), 20);
-    };
-
     worker.onmessage = function(e) {
         if (e.data.action === 'pressKey') { 
             pressKey(e.data.key); 
@@ -161,19 +170,21 @@
     };
 
     const detectHotkeys = (e) => {
-        if (e.target.tagName === 'INPUT') return;
+        // No interferir si el usuario está escribiendo en el chat
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
         if (e.code === ATAL_BUFOS_CODE) { const b = document.getElementById('btn-action-burst'); if(b) b.classList.contains('btn-p-green') ? startBurst(b) : stopBurst(b); }
         else if (ATAL_CURA_CODES.includes(e.code)) { const h = document.getElementById('btn-action-heal'); if(h) h.classList.contains('btn-p-green') ? startHeal(h) : stopHeal(h); }
         else if (e.code === ATAL_MINIMIZE_CODE) toggleMinimize();
     };
-    window.addEventListener('keydown', detectHotkeys, true);
+    window.addEventListener('keydown', detectHotkeys, false);
 
     const container = document.createElement('div');
     container.id = 'fs-container';
     Object.assign(container.style, { position: 'fixed', top: '40px', right: '40px', width: '235px', backgroundColor: '#0c100d', color: '#eee', borderRadius: '10px', border: '1px solid #28a745', zIndex: '10000', fontFamily: 'Segoe UI', fontSize: '11px', userSelect: 'none' });
     container.innerHTML = `
         <div id="fs-header" style="padding: 10px; background: #0f1410; cursor: move; border-radius: 9px 9px 0 0; display: flex; justify-content: center; border-bottom: 1px solid #1e3d23; font-weight: bold; color: #4ef06d;">
-            <span>TROYS260 V1.4.2</span>
+            <span>TROYS260 V1.4.3</span>
             <div style="position: absolute; right: 10px; display: flex; gap: 8px;">
                 <span id="fs-lock" class="header-btn">🔓</span>
                 <span id="fs-minimize" class="header-btn">−</span>
